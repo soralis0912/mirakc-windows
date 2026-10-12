@@ -2,6 +2,9 @@
 
 > A Mirakurun-compatible PVR backend written in Rust
 
+> [!NOTE]
+> This fork supports Windows with BonDriver.  See [docs/windows.md](./docs/windows.md).
+
 [![ci](https://github.com/mirakc/mirakc/actions/workflows/ci.yml/badge.svg)](https://github.com/mirakc/mirakc/actions/workflows/ci.yml)
 [![coverage](https://codecov.io/gh/mirakc/mirakc/branch/main/graph/badge.svg?token=EP5rQLo3Rv)](https://codecov.io/gh/mirakc/mirakc)
 [![alpine-size](https://img.shields.io/docker/image-size/mirakc/mirakc/alpine?label=alpine)](https://hub.docker.com/r/mirakc/mirakc/tags?page=1&name=alpine)

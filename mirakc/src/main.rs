@@ -2,6 +2,9 @@ mod migrate;
 mod openapi;
 mod rebuild_timeshift;
 mod serve;
+#[cfg(windows)]
+mod service;
+mod shutdown;
 
 use std::path::PathBuf;
 
@@ -29,6 +32,12 @@ struct CommandLine {
     #[arg(long, value_enum, env = "MIRAKC_LOG_FORMAT", default_value = "text")]
     log_format: LogFormat,
 
+    /// Path to a log file.
+    ///
+    /// Logs are output to STDERR if this option is not specified.
+    #[arg(long, env = "MIRAKC_LOG_FILE")]
+    log_file: Option<PathBuf>,
+
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -44,26 +53,49 @@ enum Command {
     Migrate(migrate::CommandLine),
     Openapi(openapi::CommandLine),
     RebuildTimeshift(rebuild_timeshift::CommandLine),
+    #[cfg(windows)]
+    Service(service::CommandLine),
 }
 
-#[tokio::main]
-async fn main() {
+fn main() {
     let cl = CommandLine::parse();
 
-    // Disable logging in the `openapi` command if the OpenAPI document will be output to STDOUT.
-    if !matches!(cl.command, Some(Command::Openapi(ref cl)) if !cl.has_file()) {
-        mirakc_core::tracing_ext::init_tracing(match cl.log_format {
-            LogFormat::Text => "text",
-            LogFormat::Json => "json",
-        });
+    #[cfg(windows)]
+    if let Some(Command::Service(ref service_cl)) = cl.command {
+        service::main(&cl, service_cl);
+        return;
     }
 
+    init_tracing(&cl);
+    tokio::runtime::Runtime::new()
+        .expect("Failed to create a tokio runtime")
+        .block_on(async_main(cl));
+}
+
+fn init_tracing(cl: &CommandLine) {
+    // Disable logging in the `openapi` command if the OpenAPI document will be output to STDOUT.
+    if matches!(cl.command, Some(Command::Openapi(ref cl)) if !cl.has_file()) {
+        return;
+    }
+    let format = match cl.log_format {
+        LogFormat::Text => "text",
+        LogFormat::Json => "json",
+    };
+    match cl.log_file {
+        Some(ref path) => mirakc_core::tracing_ext::init_tracing_with_file(format, path),
+        None => mirakc_core::tracing_ext::init_tracing(format),
+    }
+}
+
+async fn async_main(cl: CommandLine) {
     let config = mirakc_core::config::load(&cl.config);
 
     match cl.command {
         Some(Command::Migrate(ref cl)) => migrate::main(&config, cl).await,
         Some(Command::Openapi(ref cl)) => openapi::main(config, cl).await,
         Some(Command::RebuildTimeshift(ref cl)) => rebuild_timeshift::main(config, cl).await,
+        #[cfg(windows)]
+        Some(Command::Service(_)) => unreachable!(),
         None => {
             if auto_migrate() {
                 tracing::info!("Migrating existing data automatically...");

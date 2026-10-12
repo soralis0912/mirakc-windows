@@ -1,16 +1,10 @@
 use std::sync::Arc;
 
-use tokio::signal::unix::SignalKind;
-use tokio::signal::unix::signal;
-
 use actlet::prelude::*;
 use mirakc_core::*;
 
 pub async fn main(config: Arc<config::Config>) {
     let system = System::new();
-
-    let mut sigint = signal(SignalKind::interrupt()).unwrap();
-    let mut sigterm = signal(SignalKind::terminate()).unwrap();
 
     tokio::select! {
         result = serve(config, &system) => {
@@ -19,12 +13,7 @@ pub async fn main(config: Arc<config::Config>) {
                 Err(err) => tracing::error!(%err),
             }
         }
-        _ = sigint.recv() => {
-            tracing::info!("SIGINT received");
-        }
-        _ = sigterm.recv() => {
-            tracing::info!("SIGTERM received");
-        }
+        _ = crate::shutdown::wait() => {}
     }
 
     tracing::info!("Stopping...");

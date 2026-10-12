@@ -1269,6 +1269,9 @@ impl LocalOnairProgramTrackerConfig {
     pub fn default_command() -> String {
         if cfg!(target_os = "macos") {
             "gtimeout 5s mirakc-arib collect-eitpf --sids={{{sid}}}".to_string()
+        } else if cfg!(windows) {
+            // timeout.exe on Windows is not a command to limit the execution time.
+            "mirakc-arib collect-eitpf --sids={{{sid}}}".to_string()
         } else {
             "timeout 5s mirakc-arib collect-eitpf --sids={{{sid}}}".to_string()
         }
@@ -1396,8 +1399,20 @@ pub struct LogoConfig {
 }
 
 impl ResourceConfig {
+    #[cfg(not(windows))]
     fn default_strings_yaml() -> String {
         "/etc/mirakc/strings.yml".to_string()
+    }
+
+    // There is no standard location like /etc on Windows.  Use strings.yml placed in the same
+    // folder as the executable.
+    #[cfg(windows)]
+    fn default_strings_yaml() -> String {
+        std::env::current_exe()
+            .ok()
+            .and_then(|exe| exe.parent().map(|dir| dir.join("strings.yml")))
+            .map(|path| path.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "strings.yml".to_string())
     }
 
     fn validate(&self) {
@@ -1436,28 +1451,23 @@ impl Default for ResourceConfig {
 }
 
 fn is_valid_command(command: &str) -> bool {
-    let words = match shell_words::split(command) {
-        Ok(words) => words,
-        Err(_) => return false,
+    let prog = match crate::command_util::program_of(command) {
+        Some(prog) => prog,
+        None => return false,
     };
 
-    let prog = match words.split_first() {
-        Some((prog, _)) => prog,
-        _ => return false,
-    };
-
-    if Path::new(prog).is_executable() {
+    if Path::new(&prog).is_executable() {
         return true;
     }
 
-    which::which(prog).is_ok()
+    which::which(&prog).is_ok()
 }
 
 #[allow(clippy::field_reassign_with_default)]
 #[allow(clippy::needless_update)]
 #[cfg(test)]
 mod tests {
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
     use std::os::fd::AsRawFd;
 
     use super::*;
@@ -1468,7 +1478,7 @@ mod tests {
     use tempfile::NamedTempFile;
     use test_log::test;
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
     #[test]
     fn test_load() {
         let config_yml_path = format!("{}/tests/config.yml", std::env!("CARGO_MANIFEST_DIR"));
@@ -1682,7 +1692,7 @@ mod tests {
         config.validate(true);
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
     #[test]
     fn test_config_validate_tuner_dedicated_for_timeshift() {
         let chunk_size = TimeshiftRecorderConfig::BUFSIZE;
@@ -1725,7 +1735,7 @@ mod tests {
         config.validate(true);
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
     #[test]
     #[should_panic(expected = "config.timeshift.recorders[recorder]: uses undefined channel GR/26")]
     fn test_config_validate_tuner_dedicated_for_timeshift_undefined_channel() {
@@ -1769,7 +1779,7 @@ mod tests {
         config.validate(true);
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
     #[test]
     #[should_panic(
         expected = "config.timeshift.recorders[recorder]: uses tuner[test] which is not for GR"
@@ -3433,7 +3443,7 @@ mod tests {
         );
     }
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
     #[test]
     fn test_timeshift_recorder_config_validate() {
         // NOTE: The chunk size for this test should be the default chunk size,

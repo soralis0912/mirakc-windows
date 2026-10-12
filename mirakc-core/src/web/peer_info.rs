@@ -1,7 +1,9 @@
+#[cfg(unix)]
 use std::sync::Arc;
 
 use axum::extract::connect_info::Connected;
 use tokio::net::TcpStream;
+#[cfg(unix)]
 use tokio::net::UnixStream;
 
 #[allow(unused)]
@@ -10,6 +12,7 @@ pub(crate) enum PeerInfo {
     Tcp {
         addr: std::net::SocketAddr,
     },
+    #[cfg(unix)]
     Unix {
         // tokio::net::unix::SocketAddr doesn't implement Clone.
         addr: Arc<tokio::net::unix::SocketAddr>,
@@ -27,6 +30,7 @@ impl Connected<&TcpStream> for PeerInfo {
     }
 }
 
+#[cfg(unix)]
 impl Connected<&UnixStream> for PeerInfo {
     fn connect_info(target: &UnixStream) -> Self {
         Self::Unix {

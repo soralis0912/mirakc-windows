@@ -1,3 +1,4 @@
+#[cfg(unix)]
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -8,6 +9,7 @@ use hyper_util::rt::TokioExecutor;
 use hyper_util::rt::TokioIo;
 use hyper_util::server;
 use tokio::net::TcpListener;
+#[cfg(unix)]
 use tokio::net::UnixListener;
 use tower::Service;
 
@@ -27,9 +29,17 @@ where
         let (handle, _) = spawner.spawn_task(http(addr, app.clone(), spawner.clone()));
         handles.push(handle);
     }
+    #[cfg(unix)]
     for path in config.server.uds_paths() {
         let (handle, _) = spawner.spawn_task(uds(path.to_owned(), app.clone(), spawner.clone()));
         handles.push(handle);
+    }
+    #[cfg(not(unix))]
+    for path in config.server.uds_paths() {
+        tracing::warn!(
+            ?path,
+            "UNIX domain sockets are not supported on this platform"
+        );
     }
     for handle in handles.into_iter() {
         let _ = handle.await;
@@ -74,6 +84,7 @@ where
     listen!(listener, app, spawner);
 }
 
+#[cfg(unix)]
 async fn uds<W>(path: PathBuf, app: Router, spawner: W)
 where
     W: Clone + Send + Spawn,

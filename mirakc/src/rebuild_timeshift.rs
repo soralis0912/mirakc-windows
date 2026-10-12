@@ -20,8 +20,6 @@ use clap::Args;
 use mirakc_core::epg::SyncClock;
 use mirakc_core::*;
 use tempfile::TempDir;
-use tokio::signal::unix::SignalKind;
-use tokio::signal::unix::signal;
 
 const MIN_CHUNKS: u64 = 3;
 
@@ -272,19 +270,9 @@ async fn do_recording(config: Arc<config::Config>) -> bool {
     let msg = timeshift::RegisterEmitter(Emitter::new(observer));
     timeshift_manager.call(msg).await.unwrap();
 
-    let mut sigint = signal(SignalKind::interrupt()).unwrap();
-    let mut sigterm = signal(SignalKind::terminate()).unwrap();
-
     let ok = tokio::select! {
         _ = notify.notified() => true,
-        _ = sigint.recv() => {
-            tracing::info!("SIGINT received");
-            false
-        }
-        _ = sigterm.recv() => {
-            tracing::info!("SIGINT received");
-            false
-        }
+        _ = crate::shutdown::wait() => false,
     };
 
     system.shutdown().await;

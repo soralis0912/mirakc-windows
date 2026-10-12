@@ -1,4 +1,8 @@
 use std::fmt;
+use std::fs::File;
+use std::fs::OpenOptions;
+use std::path::Path;
+use std::sync::Mutex;
 
 use is_terminal::IsTerminal;
 use tracing_subscriber::filter::EnvFilter;
@@ -10,6 +14,29 @@ pub fn init_tracing(format: &str) {
         "json" => init_json_tracing(),
         _ => init_text_tracing(),
     }
+}
+
+// Logs are appended to the specified file.
+//
+// This is useful when STDOUT and STDERR are not available, such as when running as a Windows
+// service.
+pub fn init_tracing_with_file<P: AsRef<Path>>(format: &str, path: P) {
+    let file = open_log_file(path.as_ref());
+    match format {
+        "json" => init_json_tracing_with_file(file),
+        _ => init_text_tracing_with_file(file),
+    }
+}
+
+fn open_log_file(path: &Path) -> File {
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .unwrap_or_else(|err| panic!("Failed to open the log file {path:?}: {err}"))
 }
 
 fn init_json_tracing() {
@@ -26,6 +53,25 @@ fn init_text_tracing() {
         .with_timer(Rfc3339Micros)
         .with_env_filter(EnvFilter::from_default_env())
         .with_ansi(std::io::stdout().is_terminal())
+        .init();
+}
+
+fn init_json_tracing_with_file(file: File) {
+    tracing_subscriber::fmt()
+        .json()
+        .with_timer(HrTime)
+        .with_env_filter(EnvFilter::from_default_env())
+        .with_ansi(false)
+        .with_writer(Mutex::new(file))
+        .init();
+}
+
+fn init_text_tracing_with_file(file: File) {
+    tracing_subscriber::fmt()
+        .with_timer(Rfc3339Micros)
+        .with_env_filter(EnvFilter::from_default_env())
+        .with_ansi(false)
+        .with_writer(Mutex::new(file))
         .init();
 }
 

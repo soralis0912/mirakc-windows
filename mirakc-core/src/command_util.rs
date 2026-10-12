@@ -482,15 +482,10 @@ pub struct CommandBuilder<'a> {
 
 impl<'a> CommandBuilder<'a> {
     pub fn new(command: &'a str) -> Result<Self, Error> {
-        let words = match shell_words::split(command) {
-            Ok(words) => words,
-            Err(_) => return Err(Error::UnableToParse(command.to_string())),
+        let inner = match build_command(command) {
+            Some(inner) => inner,
+            None => return Err(Error::UnableToParse(command.to_string())),
         };
-
-        let (prog, args) = words.split_first().unwrap();
-
-        let mut inner = Command::new(prog);
-        inner.args(args);
 
         Ok(CommandBuilder {
             inner,
@@ -555,6 +550,65 @@ impl<'a> CommandBuilder<'a> {
         tracing::debug!(command = self.command, pid, "Spawned");
         Ok(child)
     }
+}
+
+#[cfg(not(windows))]
+fn build_command(command: &str) -> Option<Command> {
+    let words = shell_words::split(command).ok()?;
+    let (prog, args) = words.split_first()?;
+    let mut inner = Command::new(prog);
+    inner.args(args);
+    Some(inner)
+}
+
+// On Windows, each program parses its own command line.  So, only the program name is extracted
+// from the command and the remaining part is passed to the program as is.  This also makes it
+// possible to use paths containing backslashes in commands.
+#[cfg(windows)]
+fn build_command(command: &str) -> Option<Command> {
+    // Don't open a console window for each command.
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+    let (prog, args) = split_program(command)?;
+    let mut inner = Command::new(prog);
+    if !args.is_empty() {
+        inner.raw_arg(args);
+    }
+    inner.creation_flags(CREATE_NO_WINDOW);
+    Some(inner)
+}
+
+// Returns the program name of a command.
+pub(crate) fn program_of(command: &str) -> Option<String> {
+    #[cfg(not(windows))]
+    {
+        shell_words::split(command).ok()?.into_iter().next()
+    }
+    #[cfg(windows)]
+    {
+        split_program(command).map(|(prog, _)| prog.to_string())
+    }
+}
+
+// Splits a command line into the program name and the remaining arguments in the same way as
+// CommandLineToArgvW() does for the first argument.
+#[cfg(any(windows, test))]
+fn split_program(command: &str) -> Option<(&str, &str)> {
+    let command = command.trim_start();
+    let (prog, rest) = match command.strip_prefix('"') {
+        Some(quoted) => match quoted.find('"') {
+            Some(end) => (&quoted[..end], &quoted[end + 1..]),
+            None => (quoted, ""),
+        },
+        None => match command.find(char::is_whitespace) {
+            Some(end) => (&command[..end], &command[end..]),
+            None => (command, ""),
+        },
+    };
+    if prog.is_empty() {
+        return None;
+    }
+    Some((prog, rest.trim()))
 }
 
 #[derive(Clone, Copy)]
@@ -628,6 +682,26 @@ mod logging {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn test_split_program() {
+        assert_eq!(super::split_program(""), None);
+        assert_eq!(super::split_program("   "), None);
+        assert_eq!(super::split_program("\"\""), None);
+        assert_eq!(super::split_program("prog"), Some(("prog", "")));
+        assert_eq!(
+            super::split_program(r"C:\bin\prog.exe -d C:\BonDriver\a.dll  -c 0-1 "),
+            Some((r"C:\bin\prog.exe", r"-d C:\BonDriver\a.dll  -c 0-1"))
+        );
+        assert_eq!(
+            super::split_program(r#""C:\Program Files\prog.exe" "a b" c"#),
+            Some((r"C:\Program Files\prog.exe", r#""a b" c"#))
+        );
+        assert_eq!(
+            super::split_program(r#""C:\Program Files\prog.exe"#),
+            Some((r"C:\Program Files\prog.exe", ""))
+        );
+    }
+
     use super::*;
     use assert_matches::assert_matches;
     use test_log::test;

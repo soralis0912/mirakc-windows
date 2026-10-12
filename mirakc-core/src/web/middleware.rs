@@ -62,6 +62,7 @@ pub async fn access_control(
                 // Always allowed for backward compatibility if allowed_hosts is not specified.
             }
         }
+        #[cfg(unix)]
         PeerInfo::Unix { .. } => {
             // Connections via UNIX sockets are always allowed.
         }
