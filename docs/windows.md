@@ -44,6 +44,7 @@ C:\mirakc\
   config.yml
   mirakc-arib.exe  # from the mirakc-arib fork
   BonTsCat.exe     # from the EDCB fork
+  B25Decoder.dll   # if B-CAS decoding is needed (x64)
   BonDriver\
     BonDriver_XXX.dll
     BonDriver_XXX.ini (if needed)
@@ -95,6 +96,24 @@ tuners:
       C:\mirakc\BonTsCat.exe -d BonDriver_XXX.dll -c {{{channel}}}
 ```
 
+### B-CAS decoding
+
+Specify a B25Decoder-compatible DLL with the `-B` option of `BonTsCat.exe`.  Then, TS packets
+are descrambled before being sent to mirakc.  A file name is searched in the folder containing
+`BonTsCat.exe`.  Add `-e` to enable EMM processing.
+
+```yaml
+tuners:
+  - name: Tuner0
+    types: [GR, BS, CS]
+    command: >-
+      C:\mirakc\BonTsCat.exe -d BonDriver_XXX.dll -c {{{channel}}} -B B25Decoder.dll
+```
+
+Use 64-bit (x64) BonDriver and B25Decoder DLLs because `BonTsCat.exe` is a 64-bit program.
+
+### Command lines on Windows
+
 On Windows, only the program name is parsed by mirakc and the remaining part of a command line is
 passed to the program as is.  So, backslashes in paths don't need to be escaped.  Quote the
 program name with `"` if it contains spaces.
@@ -134,10 +153,6 @@ To uninstall:
 ```shell
 C:\mirakc> mirakc.exe -c C:\mirakc\config.yml service uninstall
 ```
-
-## Roadmap
-
-* Optional B-CAS decoding in BonTsCat (B25Decoder.dll)
 
 [BonTsCat]: https://github.com/soralis0912/EDCB/tree/mirakc-bondriver/Tools/BonTsCat
 [edcb-fork]: https://github.com/soralis0912/EDCB
