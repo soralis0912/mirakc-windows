@@ -61,6 +61,9 @@ fn main() {
     let cl = CommandLine::parse();
 
     #[cfg(windows)]
+    add_exe_dir_to_path();
+
+    #[cfg(windows)]
     if let Some(Command::Service(ref service_cl)) = cl.command {
         service::main(&cl, service_cl);
         return;
@@ -70,6 +73,26 @@ fn main() {
     tokio::runtime::Runtime::new()
         .expect("Failed to create a tokio runtime")
         .block_on(async_main(cl));
+}
+
+// Commands such as mirakc-arib.exe placed in the same folder as mirakc.exe can be used without
+// adding the folder to PATH.  This is useful especially when running as a Windows service.
+#[cfg(windows)]
+fn add_exe_dir_to_path() {
+    let Some(dir) = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|dir| dir.to_path_buf()))
+    else {
+        return;
+    };
+    let mut paths = vec![dir];
+    if let Some(path) = std::env::var_os("PATH") {
+        paths.extend(std::env::split_paths(&path));
+    }
+    if let Ok(path) = std::env::join_paths(paths) {
+        // SAFETY: No other threads read or write the environment at this point.
+        unsafe { std::env::set_var("PATH", path) };
+    }
 }
 
 fn init_tracing(cl: &CommandLine) {
