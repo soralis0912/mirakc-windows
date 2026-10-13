@@ -423,7 +423,9 @@ Definitions of channels.  At least, one channel must be defined.
 * name
   * An arbitrary name of the channel
 * type
-  * One of channel types in `GR`, `BS`, `CS`, `SKY` and `BS4K`
+  * One of channel types in `GR`, `BS`, `CS`, `SKY`, `BS4K` and `CATV`
+  * `CATV` is an extension of this fork for channels of cable TV transmodulation.  Clients
+    compatible with Mirakurun may not support it
 * channel
   * A channel parameter used in a tuner command template
 * extra-args
